@@ -253,14 +253,14 @@ namespace TestCntkGpu
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            var inputs = new[] { new[] { 0.0f, 0.0f }, new[] { 0.0f, 1.0f }, new[] { 1.0f, 0.0f }, new[] { 1.0f, 1.0f } };
+            //var inputs = new[] { new[] { 0.0f, 0.0f }, new[] { 0.0f, 1.0f }, new[] { 1.0f, 0.0f }, new[] { 1.0f, 1.0f } };
             var expected_outputs = new[] { new[] { 0.0f }, new[] { 1.0f }, new[] { 1.0f }, new[] { 0.0f } };
 
             //var devices = DeviceDescriptor.AllDevices();
             var cpu_device = DeviceDescriptor.CPUDevice;
             var gpu_device = DeviceDescriptor.GPUDevice(0);
 
-            const int inputDimensions = 2;
+            /*const int inputDimensions = 2;
             const int hiddenDimensions = 4;
             const int outputDimensions = 1;
 
@@ -268,11 +268,11 @@ namespace TestCntkGpu
             double initMax = 0.15;
             double normalMean = 0.0;
             double standartDev = 0.25;
-            Random random = new Random();
-            uint seed = (uint)random.Next(1, 10000);
+            //Random random = new Random();
+            //uint seed = (uint)random.Next(1, 10000);
 
             var inputVariable = Variable.InputVariable(new[] { inputDimensions }, DataType.Float);
-            var outputVariable = Variable.InputVariable(new[] { outputDimensions }, DataType.Float);
+            var outputVariable = Variable.InputVariable(new[] { outputDimensions }, DataType.Float);*/
 
             var model_device = gpu_device;
             //var hiddenWeights = new Parameter(NDArrayView.RandomUniform<float>(new[] { hiddenDimensions, inputDimensions }, initMin, initMax, 1, model_device));
@@ -286,10 +286,57 @@ namespace TestCntkGpu
             var outWeights = new Parameter(NDArrayView.RandomNormal<float>(new[] { outputDimensions, hiddenDimensions }, normalMean, standartDev, seed++, model_device));
             var outBias = new Parameter(NDArrayView.RandomNormal<float>(new[] { outputDimensions }, normalMean, standartDev, seed++, model_device));
             var model = CNTKLib.Sigmoid(CNTKLib.Plus(outBias, CNTKLib.Times(outWeights, hidden)));*/
-            
-            var hiddenLayer = CntkWrapper.Layers.Dense(hiddenDimensions, inputVariable, CNTKLib.Sigmoid, model_device);
-            var model = CntkWrapper.Layers.Dense(outputDimensions, hiddenLayer, CNTKLib.Sigmoid, model_device);
 
+            /*var hiddenLayer = CntkWrapper.Layers.Dense<float>(hiddenDimensions, inputVariable, CNTKLib.Sigmoid, model_device);
+            var model = CntkWrapper.Layers.Dense<float>(outputDimensions, hiddenLayer, CNTKLib.Sigmoid, model_device);*/
+
+            int inputDim = 61;
+            int cellDim = 61;
+            int outputDim = 6;
+            int sequenceLength = 744;
+            int candlesCount = 100;
+
+            var inputVariable = Variable.InputVariable(new[] { inputDim }, DataType.Float);
+            var outputVariable = Variable.InputVariable(new[] { outputDim }, DataType.Float);
+
+            var lstmLayer = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable, model_device);
+            var model = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer, CNTKLib.Sigmoid, model_device);
+
+            System.Random random = new System.Random();
+            var inputs = new float[candlesCount][][];
+            for(int i = 0; i < inputs.Length; i++)
+            {
+                inputs[i] = new float[sequenceLength][];
+                for(int k = 0; k < inputs[i].Length; k++)
+                {
+                    inputs[i][k] = new float[inputDim];
+                    for(int p = 0; p < inputs[i][k].Length; p++)
+                    {
+                        inputs[i][k][p] = (float)random.NextDouble();
+                    }
+                }
+            }
+
+            var inputsNDArrayView = inputs.Select(o => new NDArrayView(new[] { inputDim }, o, cpu_device));
+            var outputsNDArrayView = expected_outputs.Select(o => new NDArrayView(new[] { outputDim }, o, cpu_device));
+
+            var gpuInputsValue = Value.Create(new[] { inputDim }, inputsNDArrayView, gpu_device);
+            var gpuOutputsValue = Value.Create(new[] { outputDim }, outputsNDArrayView, gpu_device);
+            var minibatchBindings = new Dictionary<Variable, Value> { { inputVariable, gpuInputsValue }, { outputVariable, gpuOutputsValue } };
+
+            int epoch_count = 1000;
+
+            for (int i = 0; i < epoch_count; i++)
+            {
+                trainer.TrainMinibatch(minibatchBindings, true, gpu_device);
+            }
+
+            var inputDataMap = new Dictionary<Variable, Value>() { { inputVariable, gpuInputsValue } };
+            var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
+            model.Evaluate(inputDataMap, outputDataMap, gpu_device);
+            var outputValue = outputDataMap[model.Output];
+            IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);
+            int u = 0;
             /*NDArrayView hiddenWeightsArrayViewBefore = hiddenWeights.Value();
             Value hiddenWeightValueBefore = new Value(hiddenWeightsArrayViewBefore);
             IList<IList<float>> hiddenWeightDataBefore = hiddenWeightValueBefore.GetDenseData<float>(hiddenWeights);
@@ -314,7 +361,7 @@ namespace TestCntkGpu
             var learner = CNTKLib.AdamLearner(new ParameterVector(model.Parameters().Select(o => o).ToList()), schedule, momentum);
             var trainer = CNTKLib.CreateTrainer(model, trainingLoss, trainingLoss, new LearnerVector(new[] { learner }));*/
 
-            TrainingParameterScheduleDouble learningRatePerSample = new TrainingParameterScheduleDouble(0.01, 1);
+            /*TrainingParameterScheduleDouble learningRatePerSample = new TrainingParameterScheduleDouble(0.01, 1);
             IList<Learner> parameterLearners = new List<Learner>() { Learner.SGDLearner(model.Parameters(), learningRatePerSample) };
             var trainer = Trainer.CreateTrainer(model, trainingLoss, trainingLoss, parameterLearners);
 
@@ -336,7 +383,7 @@ namespace TestCntkGpu
             var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
             model.Evaluate(inputDataMap, outputDataMap, gpu_device);
             var outputValue = outputDataMap[model.Output];
-            IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);
+            IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);*/
             int y = 0;
             /*
             const int minibatchSize = 4;
