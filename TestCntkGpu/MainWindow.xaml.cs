@@ -291,10 +291,10 @@ namespace TestCntkGpu
             /*var hiddenLayer = CntkWrapper.Layers.Dense<float>(hiddenDimensions, inputVariable, CNTKLib.Sigmoid, model_device);
             var model = CntkWrapper.Layers.Dense<float>(outputDimensions, hiddenLayer, CNTKLib.Sigmoid, model_device);*/
 
-            int inputDim = 5;
-            int cellDim = 5;
-            int outputDim = 3;
-            int sequenceLength = 50;
+            int inputDim = 61;
+            int cellDim = 61;
+            int outputDim = 6;
+            int sequenceLength = 744;
             int sequencesCount = 100;
 
             NDShape inputShape = NDShape.CreateNDShape(new int[] { inputDim });
@@ -308,6 +308,25 @@ namespace TestCntkGpu
 
             var lstmLayer = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable, model_device);
             var model = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer, CNTKLib.Sigmoid, model_device);
+
+            for(int i = 0; i < 3; i++)
+            {
+                int modelsCount = 300;
+                Stopwatch stopwatch2 = new Stopwatch();
+                stopwatch2.Start();
+                List<Function> models = new List<Function>();
+                for(int k = 0; k <  modelsCount; k++)
+                {
+                    var axis2 = new Axis("inputAxis");
+                    var inputVariable2 = Variable.InputVariable(inputShape, DataType.Float, "inputVariable2", new List<Axis> { axis2, Axis.DefaultBatchAxis() });
+                    var outputVariable2 = Variable.InputVariable(outputShape, DataType.Float, "outputVariable2", new List<Axis> { axis2, Axis.DefaultBatchAxis() });
+                    var lstmLayer2 = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable2, model_device);
+                    var model2 = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer2, CNTKLib.Sigmoid, model_device);
+                    models.Append(model2);
+                }
+                stopwatch2.Stop();
+                Trace.WriteLine($"create {modelsCount} models {i} ElapsedMilliseconds={stopwatch2.ElapsedMilliseconds}");
+            }
 
             Random random = new Random();
             List<List<float>> inputSequences = new List<List<float>>();
@@ -345,7 +364,7 @@ namespace TestCntkGpu
             }
             
             int u = 0;
-
+            System.Windows.Application.Current.Shutdown();
         }
     }
 }
