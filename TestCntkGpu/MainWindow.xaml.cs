@@ -12,6 +12,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using System.Diagnostics;
 using CNTK;
 
 namespace TestCntkGpu
@@ -294,153 +295,57 @@ namespace TestCntkGpu
             int cellDim = 61;
             int outputDim = 6;
             int sequenceLength = 744;
-            int candlesCount = 100;
+            int sequencesCount = 700;
 
-            var inputVariable = Variable.InputVariable(new[] { inputDim }, DataType.Float);
-            var outputVariable = Variable.InputVariable(new[] { outputDim }, DataType.Float);
+            NDShape inputShape = NDShape.CreateNDShape(new int[] { inputDim });
+            NDShape outputShape = NDShape.CreateNDShape(new int[] { outputDim });
+
+            var axis = new Axis("inputAxis");
+            var inputVariable = Variable.InputVariable(inputShape, DataType.Float, "inputVariable", new List<Axis> { axis, Axis.DefaultBatchAxis() });
+            var outputVariable = Variable.InputVariable(outputShape, DataType.Float, "outputVariable", new List<Axis> { axis, Axis.DefaultBatchAxis() });
+            //var inputVariable = Variable.InputVariable(inputShape, DataType.Float);
+            //var outputVariable = Variable.InputVariable(outputShape, DataType.Float);
 
             var lstmLayer = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable, model_device);
             var model = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer, CNTKLib.Sigmoid, model_device);
 
-            System.Random random = new System.Random();
-            var inputs = new float[candlesCount][][];
-            for(int i = 0; i < inputs.Length; i++)
+            Random random = new Random();
+            List<List<float>> inputSequences = new List<List<float>>();
+            for (int i = 0; i < sequencesCount; i++)
             {
-                inputs[i] = new float[sequenceLength][];
-                for(int k = 0; k < inputs[i].Length; k++)
+                List<float> sequence = new List<float>();
+                for (int k = 0; k < sequenceLength; k++)
                 {
-                    inputs[i][k] = new float[inputDim];
-                    for(int p = 0; p < inputs[i][k].Length; p++)
+                    float[] input_vector = new float[inputDim];
+                    for (int n = 0; n < input_vector.Length; n++)
                     {
-                        inputs[i][k][p] = (float)random.NextDouble();
+                        input_vector[n] = (float)random.NextDouble();
                     }
+                    sequence.AddRange(input_vector);
                 }
+                inputSequences.Add(sequence);
             }
 
-            var inputsNDArrayView = inputs.Select(o => new NDArrayView(new[] { inputDim }, o, cpu_device));
-            var outputsNDArrayView = expected_outputs.Select(o => new NDArrayView(new[] { outputDim }, o, cpu_device));
-
-            var gpuInputsValue = Value.Create(new[] { inputDim }, inputsNDArrayView, gpu_device);
-            var gpuOutputsValue = Value.Create(new[] { outputDim }, outputsNDArrayView, gpu_device);
-            var minibatchBindings = new Dictionary<Variable, Value> { { inputVariable, gpuInputsValue }, { outputVariable, gpuOutputsValue } };
-
-            int epoch_count = 1000;
-
-            for (int i = 0; i < epoch_count; i++)
+            //NDArrayView[] sequenceNDArrayView = inputs[0].Select(o => new NDArrayView(inputShape, o, cpu_device)).ToArray();
+            //var gpuInputSequence = Value.CreateSequence(inputShape, input_sequence, cpu_device);
+            //var gpuInputsValue = Value.Create(inputShape, sequenceNDArrayView, gpu_device);
+            var gpuInputSequences = Value.CreateBatchOfSequences(inputShape, inputSequences, gpu_device);
+            
+            for(int i = 0; i < 7; i++)
             {
-                trainer.TrainMinibatch(minibatchBindings, true, gpu_device);
+                Stopwatch stopwatch = new Stopwatch();
+                stopwatch.Start();
+                var inputDataMap = new Dictionary<Variable, Value>() { { inputVariable, gpuInputSequences } };
+                var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
+                model.Evaluate(inputDataMap, outputDataMap, gpu_device);
+                var outputValue = outputDataMap[model.Output];
+                IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);
+                stopwatch.Stop();
+                Trace.WriteLine($"{i} ElapsedMilliseconds={stopwatch.ElapsedMilliseconds}");
             }
-
-            var inputDataMap = new Dictionary<Variable, Value>() { { inputVariable, gpuInputsValue } };
-            var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
-            model.Evaluate(inputDataMap, outputDataMap, gpu_device);
-            var outputValue = outputDataMap[model.Output];
-            IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);
+            
             int u = 0;
-            /*NDArrayView hiddenWeightsArrayViewBefore = hiddenWeights.Value();
-            Value hiddenWeightValueBefore = new Value(hiddenWeightsArrayViewBefore);
-            IList<IList<float>> hiddenWeightDataBefore = hiddenWeightValueBefore.GetDenseData<float>(hiddenWeights);
 
-            NDArrayView hiddenBiasArrayViewBefore = hiddenBias.Value();
-            Value hiddenBiasValueBefore = new Value(hiddenBiasArrayViewBefore);
-            IList<IList<float>> hiddenBiasDataBefore = hiddenBiasValueBefore.GetDenseData<float>(hiddenBias);
-
-            NDArrayView outWeightsArrayViewBefore = outWeights.Value();
-            Value outWeightsValueBefore = new Value(outWeightsArrayViewBefore);
-            IList<IList<float>> outWeightsDataBefore = outWeightsValueBefore.GetDenseData<float>(outWeights);
-
-            NDArrayView outBiasArrayViewBefore = outBias.Value();
-            Value outBiasValueBefore = new Value(outBiasArrayViewBefore);
-            IList<IList<float>> outBiasDataBefore = outBiasValueBefore.GetDenseData<float>(outBias);*/
-
-
-            var trainingLoss = CNTKLib.BinaryCrossEntropy(model, outputVariable);
-
-            /*var schedule = new TrainingParameterScheduleDouble(0.05);
-            var momentum = CNTKLib.MomentumAsTimeConstantSchedule(new DoubleVector(new[] { 1.0, 10.0, 100.0 }));
-            var learner = CNTKLib.AdamLearner(new ParameterVector(model.Parameters().Select(o => o).ToList()), schedule, momentum);
-            var trainer = CNTKLib.CreateTrainer(model, trainingLoss, trainingLoss, new LearnerVector(new[] { learner }));*/
-
-            /*TrainingParameterScheduleDouble learningRatePerSample = new TrainingParameterScheduleDouble(0.01, 1);
-            IList<Learner> parameterLearners = new List<Learner>() { Learner.SGDLearner(model.Parameters(), learningRatePerSample) };
-            var trainer = Trainer.CreateTrainer(model, trainingLoss, trainingLoss, parameterLearners);
-
-            var inputsNDArrayView = inputs.Select(o => new NDArrayView(new[] { inputDimensions }, o, cpu_device));
-            var outputsNDArrayView = expected_outputs.Select(o => new NDArrayView(new[] { outputDimensions }, o, cpu_device));
-
-            var gpuInputsValue = Value.Create(new[] { inputDimensions }, inputsNDArrayView, gpu_device);
-            var gpuOutputsValue = Value.Create(new[] { outputDimensions }, outputsNDArrayView, gpu_device);
-            var minibatchBindings = new Dictionary<Variable, Value> { { inputVariable, gpuInputsValue }, { outputVariable, gpuOutputsValue } };
-
-            int epoch_count = 1000;
-
-            for(int i = 0; i < epoch_count; i++)
-            {
-                trainer.TrainMinibatch(minibatchBindings, true, gpu_device);
-            }
-
-            var inputDataMap = new Dictionary<Variable, Value>() { { inputVariable, gpuInputsValue } };
-            var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
-            model.Evaluate(inputDataMap, outputDataMap, gpu_device);
-            var outputValue = outputDataMap[model.Output];
-            IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);*/
-            int y = 0;
-            /*
-            const int minibatchSize = 4;
-
-            var features = new float[minibatchSize][];
-            var labels = new float[minibatchSize][];
-
-            const int numMinibatchesToTrain = 100;
-            var trainIndex = 0;
-
-            for (var i = 0; i < numMinibatchesToTrain; ++i)
-            {
-                for (var j = 0; j < minibatchSize; ++j)
-                {
-                    features[j] = inputs[trainIndex];
-                    labels[j] = expected_outputs[trainIndex];
-                    trainIndex = (trainIndex + 1) % inputs.Length;
-                }
-                var batchInput = Value.Create(new[] { inputDimensions }, features.Select(o => new NDArrayView(new[] { inputDimensions }, o, device)), device);
-                var batchLabels = Value.Create(new[] { outputDimensions }, labels.Select(o => new NDArrayView(new[] { outputDimensions }, o, device)), device);
-                var minibatchBindings = new Dictionary<Variable, Value> { { inputVariable, batchInput }, { outputVariable, batchLabels } };
-
-                trainer.TrainMinibatch(minibatchBindings, true, device);
-            }
-
-            float[] inputValuesArr = new float[inputs.Length * inputs[0].Length];
-            for (int i = 0; i < inputs.Length; i++)
-            {
-                for (int k = 0; k < inputs[i].Length; k++)
-                {
-                    inputValuesArr[i * inputs[i].Length + k] = inputs[i][k];
-                }
-            }
-            Value inputValues = Value.CreateBatch<float>(new int[] { inputDimensions }, inputValuesArr, device);
-            var inputDataMap = new Dictionary<Variable, Value>() { { inputVariable, inputValues } };
-            var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
-            model.Evaluate(inputDataMap, outputDataMap, device);
-            var outputValue = outputDataMap[model.Output];
-            IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);
-
-
-            NDArrayView hiddenWeightsArrayViewAfter = hiddenWeights.Value();
-            Value hiddenWeightValueAfter = new Value(hiddenWeightsArrayViewAfter);
-            IList<IList<float>> hiddenWeightDataAfter = hiddenWeightValueAfter.GetDenseData<float>(hiddenWeights);
-
-            NDArrayView hiddenBiasArrayViewAfter = hiddenBias.Value();
-            Value hiddenBiasValueAfter = new Value(hiddenBiasArrayViewAfter);
-            IList<IList<float>> hiddenBiasDataAfter = hiddenBiasValueAfter.GetDenseData<float>(hiddenBias);
-
-            NDArrayView outWeightsArrayViewAfter = outWeights.Value();
-            Value outWeightsValueAfter = new Value(outWeightsArrayViewAfter);
-            IList<IList<float>> outWeightsDataAfter = outWeightsValueAfter.GetDenseData<float>(outWeights);
-
-            NDArrayView outBiasArrayViewAfter = outBias.Value();
-            Value outBiasValueAfter = new Value(outBiasArrayViewAfter);
-            IList<IList<float>> outBiasDataAfter = outBiasValueAfter.GetDenseData<float>(outBias);
-            int y = 0;*/
         }
     }
 }
