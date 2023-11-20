@@ -291,11 +291,11 @@ namespace TestCntkGpu
             /*var hiddenLayer = CntkWrapper.Layers.Dense<float>(hiddenDimensions, inputVariable, CNTKLib.Sigmoid, model_device);
             var model = CntkWrapper.Layers.Dense<float>(outputDimensions, hiddenLayer, CNTKLib.Sigmoid, model_device);*/
 
-            int inputDim = 61;
-            int cellDim = 61;
-            int outputDim = 6;
-            int sequenceLength = 744;
-            int sequencesCount = 700;
+            int inputDim = 5;
+            int cellDim = 5;
+            int outputDim = 3;
+            int sequenceLength = 50;
+            int sequencesCount = 100;
 
             NDShape inputShape = NDShape.CreateNDShape(new int[] { inputDim });
             NDShape outputShape = NDShape.CreateNDShape(new int[] { outputDim });
