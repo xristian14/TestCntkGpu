@@ -14,6 +14,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Diagnostics;
 using CNTK;
+using System.Globalization;
 
 namespace TestCntkGpu
 {
@@ -243,7 +244,7 @@ namespace TestCntkGpu
 
 
 
-
+            
 
 
 
@@ -254,62 +255,31 @@ namespace TestCntkGpu
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            //var inputs = new[] { new[] { 0.0f, 0.0f }, new[] { 0.0f, 1.0f }, new[] { 1.0f, 0.0f }, new[] { 1.0f, 1.0f } };
-            var expected_outputs = new[] { new[] { 0.0f }, new[] { 1.0f }, new[] { 1.0f }, new[] { 0.0f } };
+            var nfi = (NumberFormatInfo)CultureInfo.InvariantCulture.NumberFormat.Clone();
+            nfi.NumberGroupSeparator = " "; //string formatted = 1234897.11m.ToString("#,0.00", nfi); // "1 234 897.11"
 
             //var devices = DeviceDescriptor.AllDevices();
-            var cpu_device = DeviceDescriptor.CPUDevice;
-            var gpu_device = DeviceDescriptor.GPUDevice(0);
-
-            /*const int inputDimensions = 2;
-            const int hiddenDimensions = 4;
-            const int outputDimensions = 1;
-
-            double initMin = -0.15;
-            double initMax = 0.15;
-            double normalMean = 0.0;
-            double standartDev = 0.25;
-            //Random random = new Random();
-            //uint seed = (uint)random.Next(1, 10000);
-
-            var inputVariable = Variable.InputVariable(new[] { inputDimensions }, DataType.Float);
-            var outputVariable = Variable.InputVariable(new[] { outputDimensions }, DataType.Float);*/
-
-            var model_device = gpu_device;
-            //var hiddenWeights = new Parameter(NDArrayView.RandomUniform<float>(new[] { hiddenDimensions, inputDimensions }, initMin, initMax, 1, model_device));
-            //var hiddenBias = new Parameter(NDArrayView.RandomUniform<float>(new[] { hiddenDimensions }, initMin, initMax, 1, model_device));
-            /*var hiddenWeights = new Parameter(NDArrayView.RandomNormal<float>(new[] { hiddenDimensions, inputDimensions }, normalMean, standartDev, seed++, model_device));
-            var hiddenBias = new Parameter(NDArrayView.RandomNormal<float>(new[] { hiddenDimensions }, normalMean, standartDev, seed++, model_device));
-            var hidden = CNTKLib.Sigmoid(CNTKLib.Plus(hiddenBias, CNTKLib.Times(hiddenWeights, inputVariable)));
-            //inputVariable.Shape.Dimensions[0]  hidden.Output.Shape.Dimensions[0]
-            //var outWeights = new Parameter(NDArrayView.RandomUniform<float>(new[] { outputDimensions, hiddenDimensions }, initMin, initMax, 1, model_device)); 
-            //var outBias = new Parameter(NDArrayView.RandomUniform<float>(new[] { outputDimensions }, initMin, initMax, 1, model_device));
-            var outWeights = new Parameter(NDArrayView.RandomNormal<float>(new[] { outputDimensions, hiddenDimensions }, normalMean, standartDev, seed++, model_device));
-            var outBias = new Parameter(NDArrayView.RandomNormal<float>(new[] { outputDimensions }, normalMean, standartDev, seed++, model_device));
-            var model = CNTKLib.Sigmoid(CNTKLib.Plus(outBias, CNTKLib.Times(outWeights, hidden)));*/
-
-            /*var hiddenLayer = CntkWrapper.Layers.Dense<float>(hiddenDimensions, inputVariable, CNTKLib.Sigmoid, model_device);
-            var model = CntkWrapper.Layers.Dense<float>(outputDimensions, hiddenLayer, CNTKLib.Sigmoid, model_device);*/
+            var cpuDevice = DeviceDescriptor.CPUDevice;
+            var gpuDevice = DeviceDescriptor.GPUDevice(0);
+            var modelDevice = gpuDevice;
 
             int inputDim = 61;
             int cellDim = 61;
             int outputDim = 6;
             int sequenceLength = 744;
-            int sequencesCount = 100;
+            int sequencesCount = 10;
 
-            NDShape inputShape = NDShape.CreateNDShape(new int[] { inputDim });
+            /*NDShape inputShape = NDShape.CreateNDShape(new int[] { inputDim });
             NDShape outputShape = NDShape.CreateNDShape(new int[] { outputDim });
 
             var axis = new Axis("inputAxis");
             var inputVariable = Variable.InputVariable(inputShape, DataType.Float, "inputVariable", new List<Axis> { axis, Axis.DefaultBatchAxis() });
             var outputVariable = Variable.InputVariable(outputShape, DataType.Float, "outputVariable", new List<Axis> { axis, Axis.DefaultBatchAxis() });
-            //var inputVariable = Variable.InputVariable(inputShape, DataType.Float);
-            //var outputVariable = Variable.InputVariable(outputShape, DataType.Float);
 
-            var lstmLayer = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable, model_device);
-            var model = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer, CNTKLib.Sigmoid, model_device);
+            var lstmLayer = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable, modelDevice);
+            var model = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer, CNTKLib.Sigmoid, modelDevice);*/
 
-            for(int i = 0; i < 3; i++)
+            /*for(int i = 0; i < 3; i++)
             {
                 int modelsCount = 300;
                 Stopwatch stopwatch2 = new Stopwatch();
@@ -320,13 +290,13 @@ namespace TestCntkGpu
                     var axis2 = new Axis("inputAxis");
                     var inputVariable2 = Variable.InputVariable(inputShape, DataType.Float, "inputVariable2", new List<Axis> { axis2, Axis.DefaultBatchAxis() });
                     var outputVariable2 = Variable.InputVariable(outputShape, DataType.Float, "outputVariable2", new List<Axis> { axis2, Axis.DefaultBatchAxis() });
-                    var lstmLayer2 = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable2, model_device);
-                    var model2 = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer2, CNTKLib.Sigmoid, model_device);
+                    var lstmLayer2 = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable2, modelDevice);
+                    var model2 = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer2, CNTKLib.Sigmoid, modelDevice);
                     models.Append(model2);
                 }
                 stopwatch2.Stop();
                 Trace.WriteLine($"create {modelsCount} models {i} ElapsedMilliseconds={stopwatch2.ElapsedMilliseconds}");
-            }
+            }*/
 
             Random random = new Random();
             List<List<float>> inputSequences = new List<List<float>>();
@@ -345,26 +315,77 @@ namespace TestCntkGpu
                 inputSequences.Add(sequence);
             }
 
-            //NDArrayView[] sequenceNDArrayView = inputs[0].Select(o => new NDArrayView(inputShape, o, cpu_device)).ToArray();
-            //var gpuInputSequence = Value.CreateSequence(inputShape, input_sequence, cpu_device);
-            //var gpuInputsValue = Value.Create(inputShape, sequenceNDArrayView, gpu_device);
-            var gpuInputSequences = Value.CreateBatchOfSequences(inputShape, inputSequences, gpu_device);
-            
-            for(int i = 0; i < 7; i++)
+            var modelTest = CreateModel(modelDevice, inputDim, cellDim, outputDim);
+
+            var modelDeviceInputSequences = Value.CreateBatchOfSequences(modelTest.Arguments[0].Shape, inputSequences, modelDevice);
+
+            var inputDataMapTest = new Dictionary<Variable, Value>() { { modelTest.Arguments[0], modelDeviceInputSequences } };
+            var outputDataMapTest = new Dictionary<Variable, Value>() { { modelTest.Output, null } };
+            modelTest.Evaluate(inputDataMapTest, outputDataMapTest, modelDevice);
+
+            int numEvaluate = 20;
+            bool isParallel = true;
+            Stopwatch stopwatch1 = new Stopwatch();
+            stopwatch1.Start();
+
+            if (isParallel)
+            {
+                int threadsNum = 2;
+                Parall parall = new Parall(threadsNum);
+                List<ParallTaskBase> parallTasks = new List<ParallTaskBase>();
+                for(int i = 0; i < numEvaluate; i++)
+                {
+                    var model = CreateModel(modelDevice, inputDim, cellDim, outputDim);
+                    var inputDataMap = new Dictionary<Variable, Value>() { { model.Arguments[0], modelDeviceInputSequences } };
+                    var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
+                    ParallTaskModelEvaluate parallTaskModelEvaluate = new ParallTaskModelEvaluate(model, inputDataMap, outputDataMap, modelDevice);
+                    parallTasks.Add(parallTaskModelEvaluate);
+                }
+                parall.AddParallTasks(parallTasks);
+                parall.Run();
+            }
+            else
+            {
+                for (int i = 0; i < numEvaluate; i++)
+                {
+                    var model = CreateModel(modelDevice, inputDim, cellDim, outputDim);
+                    var inputDataMap = new Dictionary<Variable, Value>() { { model.Arguments[0], modelDeviceInputSequences } };
+                    var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
+                    model.Evaluate(inputDataMap, outputDataMap, modelDevice);
+                }
+            }
+
+            stopwatch1.Stop();
+            Trace.WriteLine($"isParallel={isParallel}, numEvaluate={numEvaluate}, ElapsedMilliseconds=({stopwatch1.ElapsedMilliseconds.ToString("#,0", nfi)})");
+
+            /*for(int i = 0; i < 7; i++)
             {
                 Stopwatch stopwatch = new Stopwatch();
                 stopwatch.Start();
-                var inputDataMap = new Dictionary<Variable, Value>() { { inputVariable, gpuInputSequences } };
+                var inputDataMap = new Dictionary<Variable, Value>() { { inputVariable, modelDeviceInputSequences } };
                 var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
-                model.Evaluate(inputDataMap, outputDataMap, gpu_device);
+                model.Evaluate(inputDataMap, outputDataMap, modelDevice);
                 var outputValue = outputDataMap[model.Output];
                 IList<IList<float>> actualLabelSoftMax = outputValue.GetDenseData<float>(model.Output);
                 stopwatch.Stop();
                 Trace.WriteLine($"{i} ElapsedMilliseconds={stopwatch.ElapsedMilliseconds}");
-            }
-            
+            }*/
+
             int u = 0;
             System.Windows.Application.Current.Shutdown();
+        }
+        private Function CreateModel(DeviceDescriptor device, int inputDim, int cellDim, int outputDim)
+        {
+            NDShape inputShape = NDShape.CreateNDShape(new int[] { inputDim });
+            NDShape outputShape = NDShape.CreateNDShape(new int[] { outputDim });
+
+            var axis = new Axis("inputAxis");
+            var inputVariable = Variable.InputVariable(inputShape, DataType.Float, "inputVariable", new List<Axis> { axis, Axis.DefaultBatchAxis() });
+            var outputVariable = Variable.InputVariable(outputShape, DataType.Float, "outputVariable", new List<Axis> { axis, Axis.DefaultBatchAxis() });
+
+            var lstmLayer = CntkWrapper.Layers.LSTM<float>(cellDim, inputVariable, device);
+            var model = CntkWrapper.Layers.Dense<float>(outputDim, lstmLayer, CNTKLib.Sigmoid, device);
+            return model;
         }
     }
 }
