@@ -11,7 +11,7 @@ using CNTK;
 
 namespace TestCntkGpu
 {
-    public class Parall
+    public class Parall<T>
     {
         private int _threadsNum;
         public int ThreadsNum
@@ -26,27 +26,35 @@ namespace TestCntkGpu
             set { _sleepMilliseconds = value; }
         }
 
-        private List<ParallTaskBase> _parallTasksQueue = new List<ParallTaskBase>();
+        private List<ParallTask<T>> _parallTasksQueue = new List<ParallTask<T>>();
+
+        private List<ParallTask<T>> _completedParallTasks = new List<ParallTask<T>>();
+        public List<ParallTask<T>> CompletedParallTasks
+        {
+            get { return _completedParallTasks; }
+            private set { _completedParallTasks = value; }
+        }
 
         public Parall(int threadsNum)
         {
-            _threadsNum = threadsNum;
+            ThreadsNum = threadsNum;
         }
 
-        public void AddParallTasks(List<ParallTaskBase>  parallTasks)
+        public void AddParallTasks(List<ParallTask<T>>  parallTasks)
         {
             _parallTasksQueue.AddRange(parallTasks);
         }
 
         public void Run()
         {
-            int actualThreadesNum = _parallTasksQueue.Count >= _threadsNum ? _threadsNum : _parallTasksQueue.Count;
-            ParallTaskBase[] runningParallTasks = new ParallTaskBase[actualThreadesNum];
+            CompletedParallTasks.Clear();
+            int actualThreadesNum = _parallTasksQueue.Count >= ThreadsNum ? ThreadsNum : _parallTasksQueue.Count;
+            ParallTask<T>[] runningParallTasks = new ParallTask<T>[actualThreadesNum];
             int queueIndex = 0;
 
             for(int i = 0; i < actualThreadesNum; i++)
             {
-                ParallTaskBase parallTask = _parallTasksQueue[queueIndex]; //нужно передавать в Task.Run объект, а не массив с индексом объекта, т.к. после увеличения индекса массива в этом потоке, в новом потоке будет выбран объект по новому индексу
+                ParallTask<T> parallTask = _parallTasksQueue[queueIndex]; //нужно передавать в Task.Run объект, а не массив с индексом объекта, т.к. после увеличения индекса массива в этом потоке, в новом потоке будет выбран объект по новому индексу
                 Task.Run(() => parallTask.Run());
                 runningParallTasks[i] = _parallTasksQueue[queueIndex];
                 queueIndex++;
@@ -55,7 +63,7 @@ namespace TestCntkGpu
             bool isComplete = false;
             while(!isComplete)
             {
-                Thread.Sleep(_sleepMilliseconds);
+                Thread.Sleep(SleepMilliseconds);
                 isComplete = true;
                 for(int i = 0; i < actualThreadesNum; i++)
                 {
@@ -63,7 +71,7 @@ namespace TestCntkGpu
                     {
                         if(queueIndex < _parallTasksQueue.Count)
                         {
-                            ParallTaskBase parallTask = _parallTasksQueue[queueIndex];
+                            ParallTask<T> parallTask = _parallTasksQueue[queueIndex];
                             Task.Run(() => parallTask.Run());
                             runningParallTasks[i] = _parallTasksQueue[queueIndex];
                             queueIndex++;
@@ -80,10 +88,12 @@ namespace TestCntkGpu
                     isComplete = false;
                 }
             }
+            CompletedParallTasks.AddRange(_parallTasksQueue);
             _parallTasksQueue.Clear();
         }
     }
-    public abstract class ParallTaskBase
+
+    public class ParallTask<T>
     {
         private readonly object locker = new object();
         private bool _isComplete = false;
@@ -104,24 +114,32 @@ namespace TestCntkGpu
                 }
             }
         }
-        public abstract void Run();
-    }
-    public class ParallTaskModelEvaluate : ParallTaskBase
-    {
-        private Function _model;
-        private Dictionary<Variable, Value> _inputDataMap;
-        private Dictionary<Variable, Value> _outputDataMap;
-        private DeviceDescriptor _modelDevice;
-        public ParallTaskModelEvaluate(Function model, Dictionary<Variable, Value> inputDataMap, Dictionary<Variable, Value> outputDataMap, DeviceDescriptor modelDevice)
+        private T _res;
+        public T Res
         {
-            _model = model;
-            _inputDataMap = inputDataMap;
-            _outputDataMap = outputDataMap;
-            _modelDevice = modelDevice;
+            get { return _res; }
+            private set { _res = value; }
         }
-        public override void Run()
+        private Func<T> _function;
+        private Action _action;
+        public ParallTask(Func<T> function)
         {
-            _model.Evaluate(_inputDataMap, _outputDataMap, _modelDevice);
+            _function = function;
+        }
+        public ParallTask(Action action)
+        {
+            _action = action;
+        }
+        public void Run()
+        {
+            if( _function != null )
+            {
+                _res = _function();
+            }
+            else
+            {
+                _action();
+            }
             IsComplete = true;
         }
     }
