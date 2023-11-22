@@ -253,46 +253,22 @@ namespace TestCntkGpu
             LogisticRegression.TrainAndEvaluate(DeviceDescriptor.CPUDevice);*/
         }
 
-        private void Func1()
-        {
-            int x = 0;
-        }
-        private void Func2(int x)
-        {
-            x = 0;
-        }
-        private Tuple<float,List<double>> Func3(int x)
-        {
-            return new Tuple<float, List<double>>(x, new List<double>());
-        }
-
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            List<ParallTask<Tuple<float, List<double>>>> parallTasks2 = new List<ParallTask<Tuple<float, List<double>>>>();
-            for(int i = 0; i < 20; i++)
-            {
-                parallTasks2.Add(new ParallTask<Tuple<float, List<double>>>(() => Func2(1)));
-            }
-            Parall<Tuple<float, List<double>>> parall2 = new Parall<Tuple<float, List<double>>>(1);
-            parall2.AddParallTasks(parallTasks2);
-            parall2.Run();
-
-
-
             var nfi = (NumberFormatInfo)CultureInfo.InvariantCulture.NumberFormat.Clone();
             nfi.NumberGroupSeparator = " "; //string formatted = 1234897.11m.ToString("#,0.00", nfi); // "1 234 897.11"
 
             //var devices = DeviceDescriptor.AllDevices();
             var cpuDevice = DeviceDescriptor.CPUDevice;
-            var gpuDevice = DeviceDescriptor.GPUDevice(0);
-            var modelDevice = gpuDevice;
+            //var gpuDevice = DeviceDescriptor.GPUDevice(0);
+            var modelDevice = cpuDevice;
             //DeviceDescriptor.TrySetDefaultDevice(modelDevice);
 
             int inputDim = 61;
             int cellDim = 61;
             int outputDim = 6;
             int sequenceLength = 744;
-            int sequencesCount = 12;
+            int sequencesCount = 100;
 
             /*NDShape inputShape = NDShape.CreateNDShape(new int[] { inputDim });
             NDShape outputShape = NDShape.CreateNDShape(new int[] { outputDim });
@@ -344,11 +320,11 @@ namespace TestCntkGpu
 
             var modelDeviceInputSequences = Value.CreateBatchOfSequences(modelTest.Arguments[0].Shape, inputSequences, modelDevice);
 
-            var inputDataMapTest = new Dictionary<Variable, Value>() { { modelTest.Arguments[0], modelDeviceInputSequences } };
+            /*var inputDataMapTest = new Dictionary<Variable, Value>() { { modelTest.Arguments[0], modelDeviceInputSequences } };
             var outputDataMapTest = new Dictionary<Variable, Value>() { { modelTest.Output, null } };
-            modelTest.Evaluate(inputDataMapTest, outputDataMapTest, modelDevice);
+            modelTest.Evaluate(inputDataMapTest, outputDataMapTest, modelDevice);*/
 
-            int numEvaluate = 10;
+            int numEvaluate = 3;
 
             bool isParallelCreateModels = false;
             Stopwatch stopwatchCreateModels = new Stopwatch();
@@ -357,8 +333,9 @@ namespace TestCntkGpu
             Function[] models = new Function[numEvaluate];
             if (isParallelCreateModels)
             {
-                int threadsNum = 4;
+                int threadsNum = 25;
                 Parall<Function> parall = new Parall<Function>(threadsNum);
+                parall.SleepMilliseconds = 2;
                 List<ParallTask<Function>> parallTasks = new List<ParallTask<Function>>();
                 for (int i = 0; i < numEvaluate; i++)
                 {
@@ -381,7 +358,7 @@ namespace TestCntkGpu
             stopwatchCreateModels.Stop();
             Trace.WriteLine($"stopwatchCreateModels: numEvaluate={numEvaluate}, isParallel={isParallelCreateModels}, ElapsedMilliseconds=({stopwatchCreateModels.ElapsedMilliseconds.ToString("#,0", nfi)})");
 
-            bool isParallelEvaluate = true;
+            bool isParallelEvaluate = false;
             Stopwatch stopwatchEvaluate = new Stopwatch();
             stopwatchEvaluate.Start();
 
@@ -404,10 +381,14 @@ namespace TestCntkGpu
             {
                 for (int i = 0; i < numEvaluate; i++)
                 {
+                    Stopwatch stopwatchSingleEvaluation = new Stopwatch();
+                    stopwatchSingleEvaluation.Start();
                     var model = models[i];
                     var inputDataMap = new Dictionary<Variable, Value>() { { model.Arguments[0], modelDeviceInputSequences } };
                     var outputDataMap = new Dictionary<Variable, Value>() { { model.Output, null } };
                     model.Evaluate(inputDataMap, outputDataMap, modelDevice);
+                    stopwatchSingleEvaluation.Stop();
+                    Trace.WriteLine($"SingleEvaluation i={i}, ElapsedMilliseconds=({stopwatchSingleEvaluation.ElapsedMilliseconds.ToString("#,0", nfi)})");
                 }
             }
 
